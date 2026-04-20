@@ -42,4 +42,8 @@ client.once('ready', () => {
   startModrinthChecker(client);
 });
 
+// ── Keepalive per Railway ──────────────────────────────────────────────────
+const http = require('http');
+http.createServer((req, res) => res.end('OK')).listen(process.env.PORT || 3000);
+
 client.login(process.env.BOT_TOKEN);
