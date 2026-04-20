@@ -1,20 +1,20 @@
 module.exports = {
   // ─── IL TUO PROFILO MODRINTH ───────────────────────────────────────────────
-  modrinthAuthorId: 'IL_TUO_USERNAME_MODRINTH',
+  modrinthAuthorId: 'SixAtomicFire',
 
   // ─── CANALI DISCORD ────────────────────────────────────────────────────────
   channels: {
-    announcements:    'ID_CANALE_ANNUNCI',
-    ticketsCategory:  'ID_CATEGORIA_TICKET',
-    ticketsPanel:     'ID_CANALE_TICKET_PANEL',
-    ticketsLog:       'ID_CANALE_LOG_TICKET',
-    suggestions:      'ID_CANALE_SUGGERIMENTI',
-    welcome:          'ID_CANALE_BENVENUTO',
+    announcements:    null,
+    ticketsCategory:  null,
+    ticketsPanel:     null,
+    ticketsLog:       null,
+    suggestions:      null,
+    welcome:          null,
   },
 
   // ─── RUOLI ─────────────────────────────────────────────────────────────────
   roles: {
-    support: 'ID_RUOLO_SUPPORT',
+    support: null,
   },
 
   // ─── INTERVALLO CONTROLLO MODRINTH (in minuti) ─────────────────────────────
