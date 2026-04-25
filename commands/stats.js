@@ -1,67 +1,99 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const config = require('../config');
 
-function bar(value, max, length = 12) {
-  const filled = Math.round((value / max) * length);
-  return '█'.repeat(filled) + '░'.repeat(length - filled);
+async function modrinthFetch(url) {
+  const { default: fetch } = await import('node-fetch');
+  const res = await fetch(url, { headers: { 'User-Agent': 'SIXsBot/2.0' } });
+  if (!res.ok) throw new Error(`Modrinth API ${res.status}`);
+  return res.json();
 }
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('stats')
-    .setDescription('Statistiche globali di tutti i tuoi plugin su Modrinth'),
+    .setDescription('📊 Show live statistics for SIXsPlugins from Modrinth')
+    .addStringOption(o => o
+      .setName('plugin')
+      .setDescription('Specific plugin (leave empty for all)')
+      .setRequired(false)
+      .addChoices(...config.plugins.map(p => ({ name: p.id, value: p.id })))
+    ),
 
   async execute(interaction) {
     await interaction.deferReply();
 
-    try {
-      const res = await fetch(`https://api.modrinth.com/v2/user/${config.modrinthAuthorId}/projects`, {
-        headers: { 'User-Agent': 'DiscordBot/1.0' },
-      });
-      const projects = await res.json();
+    const pluginId = interaction.options.getString('plugin');
+    const targets  = pluginId
+      ? config.plugins.filter(p => p.id === pluginId)
+      : config.plugins;
 
-      if (!projects.length) {
-        return interaction.editReply({ content: '❌ Nessun plugin trovato su Modrinth.' });
+    try {
+      const embeds = [];
+
+      for (const plugin of targets) {
+        const [project, versions] = await Promise.all([
+          modrinthFetch(`https://api.modrinth.com/v2/project/${plugin.modrinthId}`),
+          modrinthFetch(`https://api.modrinth.com/v2/project/${plugin.modrinthId}/version`),
+        ]);
+
+        const latest        = versions[0];
+        const totalDownloads = project.downloads ?? 0;
+        const followers      = project.followers  ?? 0;
+        const versionCount   = versions.length;
+        const latestVersion  = latest?.version_number ?? 'N/A';
+        const gameVersions   = latest?.game_versions?.slice(-3).join(', ') ?? 'N/A';
+        const loaders        = latest?.loaders?.map(l => l.charAt(0).toUpperCase() + l.slice(1)).join(', ') ?? 'N/A';
+        const releaseType    = latest?.version_type === 'release' ? '🟢 Release' :
+                               latest?.version_type === 'beta'    ? '🟡 Beta'    : '🔴 Alpha';
+        const updatedAt      = latest?.date_published
+          ? `<t:${Math.floor(new Date(latest.date_published).getTime() / 1000)}:R>`
+          : 'N/A';
+
+        // Calcola download dell'ultima versione
+        const latestDownloads = versions
+          .filter(v => v.version_number === latestVersion)
+          .reduce((sum, v) => sum + (v.downloads ?? 0), 0);
+
+        // Milestone progressione
+        const milestones  = config.milestones;
+        const nextMilestone = milestones.find(m => m > totalDownloads);
+        const progressBar  = nextMilestone
+          ? buildProgressBar(totalDownloads, nextMilestone)
+          : '🏆 All milestones reached!';
+
+        const embed = new EmbedBuilder()
+          .setTitle(`${plugin.emoji} ${plugin.id} — Statistics`)
+          .setColor(plugin.color)
+          .setURL(`https://modrinth.com/plugin/${plugin.slug}`)
+          .setThumbnail(project.icon_url ?? null)
+          .addFields(
+            { name: '⬇️ Total Downloads',         value: totalDownloads.toLocaleString(),  inline: true },
+            { name: '⬇️ Latest Version Downloads', value: latestDownloads.toLocaleString(), inline: true },
+            { name: '❤️ Followers',               value: followers.toLocaleString(),        inline: true },
+            { name: '📦 Latest Version',           value: `\`${latestVersion}\` (${releaseType})`, inline: true },
+            { name: '🎮 Minecraft',                value: gameVersions,                     inline: true },
+            { name: '⚙️ Loader',                  value: loaders,                          inline: true },
+            { name: '🗂️ Versions Published',      value: versionCount.toString(),           inline: true },
+            { name: '🕐 Last Update',              value: updatedAt,                        inline: true },
+            { name: `📈 Next milestone: ${nextMilestone?.toLocaleString() ?? '🏆'}`, value: progressBar, inline: false },
+          )
+          .setFooter({ text: 'Data from Modrinth API • Live' })
+          .setTimestamp();
+
+        embeds.push(embed);
       }
 
-      const totalDownloads = projects.reduce((s, p) => s + (p.downloads || 0), 0);
-      const totalFollowers = projects.reduce((s, p) => s + (p.followers || 0), 0);
-      const maxDownloads = Math.max(...projects.map(p => p.downloads || 0));
+      await interaction.editReply({ embeds });
 
-      // Ordina per download
-      const sorted = [...projects].sort((a, b) => (b.downloads || 0) - (a.downloads || 0));
-
-      const chartLines = sorted.map(p => {
-        const pct = totalDownloads > 0 ? ((p.downloads / totalDownloads) * 100).toFixed(1) : '0.0';
-        return `\`${bar(p.downloads || 0, maxDownloads || 1)}\` **${p.title}**\n↳ ⬇️ ${(p.downloads || 0).toLocaleString()} download (${pct}%)`;
-      }).join('\n\n');
-
-      const embed = new EmbedBuilder()
-        .setTitle('📊 Statistiche Plugin')
-        .setColor(0x1bd96a)
-        .setDescription(chartLines)
-        .addFields(
-          { name: '📦 Plugin totali', value: `${projects.length}`, inline: true },
-          { name: '⬇️ Download totali', value: totalDownloads.toLocaleString(), inline: true },
-          { name: '⭐ Follower totali', value: totalFollowers.toLocaleString(), inline: true },
-          { name: '🏆 Plugin più scaricato', value: sorted[0]?.title || 'N/D', inline: true },
-          { name: '📈 Media download/plugin', value: Math.round(totalDownloads / projects.length).toLocaleString(), inline: true },
-        )
-        .setTimestamp()
-        .setFooter({ text: 'Dati in tempo reale da Modrinth' });
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setLabel('Profilo Modrinth')
-          .setURL(`https://modrinth.com/user/${config.modrinthAuthorId}`)
-          .setStyle(ButtonStyle.Link)
-          .setEmoji('🔗')
-      );
-
-      await interaction.editReply({ embeds: [embed], components: [row] });
-    } catch (err) {
-      console.error(err);
-      await interaction.editReply({ content: '❌ Errore durante il recupero delle statistiche.' });
+    } catch (e) {
+      await interaction.editReply({ content: `❌ Failed to fetch stats: ${e.message}` });
     }
   },
 };
+
+function buildProgressBar(current, target, length = 20) {
+  const pct   = Math.min(current / target, 1);
+  const filled = Math.round(pct * length);
+  const bar    = '█'.repeat(filled) + '░'.repeat(length - filled);
+  return `\`${bar}\` ${(pct * 100).toFixed(1)}% (${current.toLocaleString()} / ${target.toLocaleString()})`;
+}

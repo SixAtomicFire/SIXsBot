@@ -1,265 +1,230 @@
-/**
- * ============================================================
- *  commands/setup-server.js
- *  Comando slash  /setup-server
- *
- *  Crea automaticamente categorie, canali e ruoli nel server.
- *  Usabile una sola volta dallo staff (richiede Manage Guild).
- *
- *  INSTALLAZIONE:
- *  1. Copia questo file in  commands/setup-server.js
- *  2. Esegui  node deploy-commands.js  per registrare il comando
- *  3. Sul server usa  /setup-server  — solo una volta!
- * ============================================================
- */
-
 const {
-  SlashCommandBuilder,
-  PermissionFlagsBits,
-  ChannelType,
-  EmbedBuilder,
+  SlashCommandBuilder, PermissionFlagsBits,
+  ChannelType, EmbedBuilder,
 } = require('discord.js');
+const config = require('../config');
+const fs     = require('fs');
+const path   = require('path');
 
-// ── STRUTTURA SERVER ──────────────────────────────────────────────────────────
-//
-//  lockFor     → ruoli che vedono ma NON possono scrivere
-//  staffOnly   → visibile solo a Owner / Developer / Moderatore
-//  premiumOnly → visibile solo a Premium e staff
-//  slowmode    → secondi di slowmode
-//
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
 const ROLES = [
-  { name: '👑 Owner',      color: 0xF4C75A, hoist: true,  mentionable: false },
-  { name: '⚙️ Developer',  color: 0xAA8ED6, hoist: true,  mentionable: false },
-  { name: '🛡️ Moderatore', color: 0x5865F2, hoist: true,  mentionable: false },
-  { name: '🤝 Helper',     color: 0x1ABFA0, hoist: true,  mentionable: true  },
-  { name: '💎 Premium',    color: 0xE67E7E, hoist: true,  mentionable: false },
-  { name: '✅ Verificato', color: 0x57F287, hoist: false, mentionable: false },
-  { name: '👤 Membro',     color: 0x99AAB5, hoist: false, mentionable: false },
+  { name: '⚡ SIXs',           color: 0xF4C75A, hoist: true,  pos: 8, admin: true  },
+  { name: '⚙️ Developer',      color: 0xAA8ED6, hoist: true,  pos: 7, admin: false },
+  { name: '🛡️ Moderatore',     color: 0x5865F2, hoist: true,  pos: 6, admin: false },
+  { name: '🤝 Helper',         color: 0x1ABFA0, hoist: true,  pos: 5, admin: false },
+  { name: '💎 Premium',        color: 0xE67E7E, hoist: true,  pos: 4, admin: false },
+  { name: '🔔 SIXsVCMute',     color: 0xAA8ED6, hoist: false, pos: 3, admin: false },
+  { name: '🔔 SIXsCanBreak',   color: 0x1ABFA0, hoist: false, pos: 2, admin: false },
+  { name: '✅ Verified',        color: 0x57F287, hoist: false, pos: 1, admin: false },
+  { name: '👤 Member',         color: 0x99AAB5, hoist: false, pos: 0, admin: false },
 ];
 
+// readOnly: solo staff può scrivere
+// staffOnly: nascosta a tutti tranne staff
+// unverified: visibile solo ai non verificati (es. #verify)
 const STRUCTURE = [
   {
-    category: '📢 INFORMAZIONI',
+    name: '🚪 WELCOME',
     channels: [
-      { name: 'benvenuto',  type: 'text',     lockFor: ['👤 Membro', '✅ Verificato', '💎 Premium', '🤝 Helper'] },
-      { name: 'regole',     type: 'text',     lockFor: ['👤 Membro', '✅ Verificato', '💎 Premium', '🤝 Helper'] },
-      { name: 'annunci',    type: 'announce', lockFor: ['👤 Membro', '✅ Verificato', '💎 Premium', '🤝 Helper'] },
-      { name: 'changelog',  type: 'announce', lockFor: ['👤 Membro', '✅ Verificato', '💎 Premium', '🤝 Helper'] },
+      { name: 'welcome',              type: 'text',    readOnly: true  },
+      { name: 'rules',                type: 'text',    readOnly: true  },
+      { name: 'verify',               type: 'text',    readOnly: true  },
+      { name: 'choose-notifications', type: 'text',    readOnly: true  },
     ],
   },
   {
-    category: '🔌 PLUGIN',
+    name: '📢 INFORMATION',
     channels: [
-      { name: 'lista-plugin',   type: 'text', lockFor: ['👤 Membro', '✅ Verificato', '💎 Premium', '🤝 Helper'] },
-      { name: 'download',       type: 'text', lockFor: ['👤 Membro', '✅ Verificato', '💎 Premium', '🤝 Helper'] },
-      { name: 'documentazione', type: 'text', lockFor: ['👤 Membro', '✅ Verificato', '💎 Premium', '🤝 Helper'] },
-      { name: 'roadmap',        type: 'text', lockFor: ['👤 Membro', '✅ Verificato', '💎 Premium', '🤝 Helper'] },
+      { name: 'announcements', type: 'announce', readOnly: true },
+      { name: 'roadmap',       type: 'text',     readOnly: true },
+      { name: 'suggestions',   type: 'text'                     },
     ],
   },
   {
-    category: '🛠️ SUPPORTO',
+    name: '🔊 SIXsVCMute',
     channels: [
-      { name: 'prima-di-chiedere', type: 'text',  lockFor: ['👤 Membro', '✅ Verificato', '💎 Premium', '🤝 Helper'] },
-      { name: 'apri-ticket',       type: 'text',  lockFor: ['👤 Membro', '✅ Verificato', '💎 Premium', '🤝 Helper'] },
-      { name: 'bug-report',        type: 'forum', slowmode: 30 },
-      { name: 'domande-generali',  type: 'forum', slowmode: 10 },
+      { name: 'vcmute-info',      type: 'text',    readOnly: true },
+      { name: 'vcmute-updates',   type: 'announce', readOnly: true },
+      { name: 'vcmute-changelog', type: 'text',    readOnly: true },
+      { name: 'vcmute-faq',       type: 'text',    readOnly: true },
     ],
   },
   {
-    category: '💬 COMMUNITY',
+    name: '⛏️ SIXsCanBreak',
     channels: [
-      { name: 'generale',             type: 'text', slowmode: 5  },
-      { name: 'mostra-il-tuo-server', type: 'text', slowmode: 30 },
-      { name: 'suggerimenti',         type: 'forum' },
-      { name: 'off-topic',            type: 'text' },
+      { name: 'canbreak-info',      type: 'text',    readOnly: true },
+      { name: 'canbreak-updates',   type: 'announce', readOnly: true },
+      { name: 'canbreak-changelog', type: 'text',    readOnly: true },
+      { name: 'canbreak-faq',       type: 'text',    readOnly: true },
     ],
   },
   {
-    category: '💎 PREMIUM',
-    premiumOnly: true,
+    name: '💬 COMMUNITY',
     channels: [
-      { name: 'premium-lounge',   type: 'text' },
-      { name: 'beta-access',      type: 'text' },
-      { name: 'anteprima-update', type: 'text', lockFor: ['💎 Premium'] },
+      { name: 'general',            type: 'text',  slowmode: 5  },
+      { name: 'plugin-discussion',  type: 'text'               },
+      { name: 'showcase',           type: 'text',  slowmode: 30 },
+      { name: 'media',              type: 'text',  slowmode: 30 },
+      { name: 'introductions',      type: 'text',  slowmode: 60 },
     ],
   },
   {
-    category: '🔒 STAFF ONLY',
+    name: '🎫 SUPPORT',
+    channels: [
+      { name: 'open-ticket', type: 'text', readOnly: true },
+    ],
+  },
+  {
+    name: '🔒 STAFF',
     staffOnly: true,
     channels: [
-      { name: 'staff-chat',   type: 'text' },
-      { name: 'log-ticket',   type: 'text' },
-      { name: 'note-interne', type: 'text' },
+      { name: 'staff-chat',     type: 'text' },
+      { name: 'ticket-logs',    type: 'text' },
+      { name: 'mod-logs',       type: 'text' },
+      { name: 'milestones',     type: 'text' },
+      { name: 'faq-pending',    type: 'text' },
+      { name: 'internal-notes', type: 'text' },
     ],
+  },
+  {
+    name: '🎫 TICKETS',
+    staffOnly: true,
+    channels: [], // categoria vuota: i ticket vengono creati qui dinamicamente
   },
 ];
 
-// ── HELPERS ───────────────────────────────────────────────────────────────────
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-// ── LOGICA SETUP ──────────────────────────────────────────────────────────────
-
 async function runSetup(guild) {
-  const results = { rolesCreated: 0, channelsCreated: 0, skipped: 0, errors: [] };
-
-  // 1. Crea ruoli
+  const res = { rolesCreated: 0, channelsCreated: 0, skipped: 0, errors: [], channelIds: {} };
   const roleMap = {};
-  for (const roleDef of ROLES) {
+  const everyone = guild.roles.everyone;
+  const staffNames = ['⚡ SIXs', '⚙️ Developer', '🛡️ Moderatore', '🤝 Helper'];
+
+  // 1. Ruoli
+  for (const rd of ROLES) {
     try {
-      const existing = guild.roles.cache.find((r) => r.name === roleDef.name);
-      if (existing) {
-        roleMap[roleDef.name] = existing;
-        results.skipped++;
-        continue;
-      }
+      const existing = guild.roles.cache.find(r => r.name === rd.name);
+      if (existing) { roleMap[rd.name] = existing; res.skipped++; continue; }
       const role = await guild.roles.create({
-        name:        roleDef.name,
-        color:       roleDef.color,
-        hoist:       roleDef.hoist,
-        mentionable: roleDef.mentionable,
-        reason:      'Setup automatico SIXsBot',
+        name: rd.name, color: rd.color, hoist: rd.hoist,
+        permissions: rd.admin ? ['Administrator'] : [],
+        reason: 'SIXsBot v2 setup',
       });
-      roleMap[roleDef.name] = role;
-      results.rolesCreated++;
+      roleMap[rd.name] = role;
+      res.rolesCreated++;
       await sleep(300);
-    } catch (err) {
-      results.errors.push(`Ruolo ${roleDef.name}: ${err.message}`);
-    }
+    } catch (e) { res.errors.push(`Role ${rd.name}: ${e.message}`); }
   }
 
-  const everyone = guild.roles.everyone;
-
-  // 2. Crea categorie e canali
+  // 2. Categorie e canali
   for (const catDef of STRUCTURE) {
     try {
       const catPerms = [];
 
       if (catDef.staffOnly) {
         catPerms.push({ id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] });
-        for (const rName of ['👑 Owner', '⚙️ Developer', '🛡️ Moderatore']) {
-          if (roleMap[rName]) {
-            catPerms.push({
-              id:    roleMap[rName].id,
-              allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages],
-            });
-          }
-        }
-      } else if (catDef.premiumOnly) {
-        catPerms.push({ id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] });
-        for (const rName of ['👑 Owner', '⚙️ Developer', '🛡️ Moderatore', '🤝 Helper', '💎 Premium']) {
-          if (roleMap[rName]) {
-            catPerms.push({ id: roleMap[rName].id, allow: [PermissionFlagsBits.ViewChannel] });
-          }
+        for (const rn of staffNames) {
+          if (roleMap[rn]) catPerms.push({ id: roleMap[rn].id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] });
         }
       }
 
-      const category = await guild.channels.create({
-        name:                 catDef.category,
-        type:                 ChannelType.GuildCategory,
-        permissionOverwrites: catPerms,
-        reason:               'Setup automatico SIXsBot',
+      const cat = await guild.channels.create({
+        name: catDef.name, type: ChannelType.GuildCategory,
+        permissionOverwrites: catPerms, reason: 'SIXsBot v2 setup',
       });
+      res.channelIds[catDef.name] = cat.id;
       await sleep(400);
 
-      for (const chDef of catDef.channels) {
+      for (const ch of catDef.channels) {
         try {
           const chPerms = [...catPerms];
 
-          if (chDef.lockFor) {
-            for (const rName of chDef.lockFor) {
-              if (roleMap[rName]) {
-                chPerms.push({
-                  id:    roleMap[rName].id,
-                  deny:  [PermissionFlagsBits.SendMessages],
-                  allow: [PermissionFlagsBits.ViewChannel],
-                });
-              }
+          if (ch.readOnly && !catDef.staffOnly) {
+            chPerms.push({ id: everyone.id, deny: [PermissionFlagsBits.SendMessages], allow: [PermissionFlagsBits.ViewChannel] });
+            for (const rn of staffNames) {
+              if (roleMap[rn]) chPerms.push({ id: roleMap[rn].id, allow: [PermissionFlagsBits.SendMessages, PermissionFlagsBits.ViewChannel] });
             }
           }
 
-          let channelType;
-          if (chDef.type === 'announce')    channelType = ChannelType.GuildAnnouncement;
-          else if (chDef.type === 'forum')  channelType = ChannelType.GuildForum;
-          else if (chDef.type === 'voice')  channelType = ChannelType.GuildVoice;
-          else                              channelType = ChannelType.GuildText;
+          let type;
+          if (ch.type === 'announce')   type = ChannelType.GuildAnnouncement;
+          else if (ch.type === 'forum') type = ChannelType.GuildForum;
+          else if (ch.type === 'voice') type = ChannelType.GuildVoice;
+          else                          type = ChannelType.GuildText;
 
-          await guild.channels.create({
-            name:                 chDef.name,
-            type:                 channelType,
-            parent:               category.id,
+          const created = await guild.channels.create({
+            name: ch.name, type, parent: cat.id,
             permissionOverwrites: chPerms,
-            rateLimitPerUser:     chDef.slowmode ?? 0,
-            reason:               'Setup automatico SIXsBot',
+            rateLimitPerUser: ch.slowmode ?? 0,
+            reason: 'SIXsBot v2 setup',
           });
-
-          results.channelsCreated++;
+          res.channelIds[ch.name] = created.id;
+          res.channelsCreated++;
           await sleep(350);
-        } catch (err) {
-          results.errors.push(`Canale #${chDef.name}: ${err.message}`);
-        }
+        } catch (e) { res.errors.push(`#${ch.name}: ${e.message}`); }
       }
-    } catch (err) {
-      results.errors.push(`Categoria ${catDef.category}: ${err.message}`);
-    }
+    } catch (e) { res.errors.push(`Category ${catDef.name}: ${e.message}`); }
   }
 
-  return results;
-}
+  // 3. Aggiorna config.js con gli ID creati
+  try {
+    const configPath = path.join(__dirname, '../config.js');
+    let src = fs.readFileSync(configPath, 'utf-8');
 
-// ── DEFINIZIONE COMANDO ───────────────────────────────────────────────────────
+    const replacements = {
+      'announcements:   null': `announcements:   '${res.channelIds['announcements'] ?? ''}'`,
+      'roadmap:         null': `roadmap:         '${res.channelIds['roadmap'] ?? ''}'`,
+      'suggestions:     null': `suggestions:     '${res.channelIds['suggestions'] ?? ''}'`,
+      'ticketPanel:     null': `ticketPanel:     '${res.channelIds['open-ticket'] ?? ''}'`,
+      'ticketLogs:      null': `ticketLogs:      '${res.channelIds['ticket-logs'] ?? ''}'`,
+      'modLogs:         null': `modLogs:         '${res.channelIds['mod-logs'] ?? ''}'`,
+      'milestones:      null': `milestones:      '${res.channelIds['milestones'] ?? ''}'`,
+      'faqPending:      null': `faqPending:      '${res.channelIds['faq-pending'] ?? ''}'`,
+    };
+
+    for (const [from, to] of Object.entries(replacements)) {
+      src = src.replace(from, to);
+    }
+    fs.writeFileSync(configPath, src);
+  } catch (e) { res.errors.push(`Config auto-update: ${e.message}`); }
+
+  return res;
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('setup-server')
-    .setDescription('⚙️ Crea canali, categorie e ruoli per SIXsPlugins (usa una volta sola!)')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+    .setDescription('⚙️ Full server setup — channels, roles, permissions (run once!)')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
-    if (!interaction.memberPermissions.has(PermissionFlagsBits.ManageGuild)) {
-      return interaction.reply({
-        content: '❌ Devi avere il permesso **Gestisci server** per usare questo comando.',
-        ephemeral: true,
-      });
-    }
-
-    await interaction.reply({
-      content: '⚙️ Setup avviato! Creazione canali e ruoli in corso… (attendi ~15 secondi)',
-      ephemeral: true,
-    });
-
+    await interaction.reply({ content: '⚙️ Setting up the server… this may take ~30 seconds.', ephemeral: true });
     try {
-      const results = await runSetup(interaction.guild);
-
+      const res = await runSetup(interaction.guild);
       const embed = new EmbedBuilder()
-        .setTitle('✅ Setup completato!')
+        .setTitle('✅ Server setup complete!')
         .setColor(0x57F287)
         .addFields(
-          { name: '🎭 Ruoli creati',  value: `${results.rolesCreated}`,    inline: true },
-          { name: '📁 Canali creati', value: `${results.channelsCreated}`, inline: true },
-          { name: '↩️ Già esistenti', value: `${results.skipped}`,          inline: true },
+          { name: '🎭 Roles',    value: `${res.rolesCreated} created`,    inline: true },
+          { name: '📁 Channels', value: `${res.channelsCreated} created`, inline: true },
+          { name: '↩️ Skipped',  value: `${res.skipped} existing`,        inline: true },
         )
-        .setDescription(
-          results.errors.length > 0
-            ? `⚠️ Alcuni elementi hanno dato errore:\n\`\`\`\n${results.errors.slice(0, 5).join('\n')}\n\`\`\``
-            : '✨ Tutto creato senza errori!'
-        )
-        .addFields({
-          name:  '📋 Prossimi passi',
+        .setDescription(res.errors.length
+          ? `⚠️ Some errors:\n\`\`\`\n${res.errors.slice(0, 5).join('\n')}\n\`\`\``
+          : '✨ No errors!')
+        .addFields({ name: '📋 Next steps',
           value:
-            '1. Assegnati il ruolo **👑 Owner**\n' +
-            '2. Usa `/ticket panel` in **#apri-ticket** per attivare i ticket\n' +
-            '3. Scrivi il messaggio di benvenuto in **#benvenuto**\n' +
-            '4. Aggiorna `config.js` con i nuovi ID canale (annunci, suggerimenti, ecc.)',
+            '1. Assign yourself the **⚡ SIXs** role\n' +
+            '2. Use `/verify-panel` in **#verify**\n' +
+            '3. Use `/notif-panel` in **#choose-notifications**\n' +
+            '4. Use `/ticket-panel` in **#open-ticket**\n' +
+            '5. Use `/plugin-status` to set each plugin status in its info channel\n' +
+            '6. Config.js has been auto-updated with channel IDs — restart the bot',
         })
-        .setFooter({ text: 'SIXsBot • Setup automatico' })
         .setTimestamp();
-
       await interaction.editReply({ content: '', embeds: [embed] });
-    } catch (err) {
-      await interaction.editReply({
-        content: `❌ Errore durante il setup: \`${err.message}\``,
-      });
+    } catch (e) {
+      await interaction.editReply({ content: `❌ Setup failed: \`${e.message}\`` });
     }
   },
 };

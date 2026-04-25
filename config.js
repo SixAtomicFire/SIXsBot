@@ -1,62 +1,80 @@
+// ============================================================
+//  config.js — SIXsBot v2
+//  Compila tutti i campi dopo aver eseguito /setup-server
+// ============================================================
+
 module.exports = {
-  // ─── IL TUO PROFILO MODRINTH ───────────────────────────────────────────────
+
+  // ── MODRINTH ──────────────────────────────────────────────
   modrinthAuthorId: 'SixAtomicFire',
+  modrinthCheckInterval: 10, // minuti
 
-  // ─── CANALI DISCORD ────────────────────────────────────────────────────────
-  channels: {
-    announcements:    null,
-    ticketsCategory:  null,
-    ticketsPanel:     null,
-    ticketsLog:       null,
-    suggestions:      null,
-    welcome:          null,
-  },
-
-  // ─── RUOLI ─────────────────────────────────────────────────────────────────
-  roles: {
-    support: null,
-  },
-
-  // ─── INTERVALLO CONTROLLO MODRINTH (in minuti) ─────────────────────────────
-  modrinthCheckInterval: 10,
-
-  // ─── MESSAGGIO DI BENVENUTO ────────────────────────────────────────────────
-  welcome: {
-    title: '👋 Benvenuto nel server!',
-    color: 0x5865f2,
-  },
-
-  // ─── FAQ ───────────────────────────────────────────────────────────────────
-  faq: [
+  plugins: [
     {
-      id: 'compatibilita',
-      question: 'Con quali versioni di Minecraft sono compatibili i plugin?',
-      answer: 'I plugin supportano Spigot/Paper 1.20.x e versioni successive. Controlla la pagina Modrinth del plugin specifico per i dettagli.',
+      id:       'SIXsVCMute',
+      slug:     'sixsvcmute',        // slug Modrinth (nell'URL)
+      modrinthId: 'feSai1Ty',        // ID progetto Modrinth
+      roleName: '🔔 SIXsVCMute',
+      color:    0xAA8ED6,
+      emoji:    '🔊',
+      channels: {
+        info:      null,  // ID canale #vcmute-info
+        updates:   null,  // ID canale #vcmute-updates
+        changelog: null,  // ID canale #vcmute-changelog
+        faq:       null,  // ID canale #vcmute-faq
+      },
     },
     {
-      id: 'installazione',
-      question: 'Come si installa un plugin?',
-      answer: 'Scarica il file `.jar` dalla pagina Modrinth, mettilo nella cartella `/plugins` del tuo server e riavvia. Non sono necessarie dipendenze extra salvo diversa indicazione.',
-    },
-    {
-      id: 'configurazione',
-      question: 'Come si configura il plugin?',
-      answer: 'Avvia il server con il plugin installato: verrà generata automaticamente la cartella di configurazione in `/plugins/NomePlugin/`. Modifica i file `.yml` secondo le tue esigenze e usa `/nomeplugin reload` per ricaricare senza riavvio.',
-    },
-    {
-      id: 'errori',
-      question: 'Il plugin non funziona o dà errori. Cosa faccio?',
-      answer: 'Controlla il file `latest.log` nella cartella del server e cerca righe con `ERROR`. Apri un ticket con il log completo e la versione del tuo server.',
-    },
-    {
-      id: 'aggiornamenti',
-      question: 'Come ricevo notifiche sugli aggiornamenti?',
-      answer: 'Gli aggiornamenti vengono annunciati automaticamente in questo server Discord non appena vengono pubblicati su Modrinth. Puoi anche seguire i progetti su Modrinth.',
-    },
-    {
-      id: 'suggerimenti',
-      question: 'Come posso suggerire una funzionalità?',
-      answer: 'Usa il comando `/suggerimento` per inviare la tua idea nel canale dedicato, dove la community può votarla.',
+      id:       'SIXsCanBreak',
+      slug:     'sixscanbreak',
+      modrinthId: 'OKUKiCaj',
+      roleName: '🔔 SIXsCanBreak',
+      color:    0x1ABFA0,
+      emoji:    '⛏️',
+      channels: {
+        info:      null,
+        updates:   null,
+        changelog: null,
+        faq:       null,
+      },
     },
   ],
+
+  // ── CANALI GENERALI ───────────────────────────────────────
+  channels: {
+    announcements:   null,  // #announcements
+    roadmap:         null,  // #roadmap
+    suggestions:     null,  // #suggestions
+    ticketPanel:     null,  // #open-ticket
+    ticketLogs:      null,  // #ticket-logs
+    modLogs:         null,  // #mod-logs
+    milestones:      null,  // #milestones (staff)
+    faqPending:      null,  // canale interno staff per FAQ in attesa di approvazione
+  },
+
+  // ── RUOLI ─────────────────────────────────────────────────
+  roles: {
+    sixs:        null,  // ⚡ SIXs
+    developer:   null,  // ⚙️ Developer
+    moderatore:  null,  // 🛡️ Moderatore
+    helper:      null,  // 🤝 Helper
+    premium:     null,  // 💎 Premium
+    verificato:  null,  // ✅ Verificato
+    membro:      null,  // 👤 Membro
+  },
+
+  // ── TICKET ────────────────────────────────────────────────
+  ticket: {
+    categoryId:       null,   // ID categoria dove vengono creati i canali ticket
+    autoCloseDays:    3,      // giorni di inattività prima dell'auto-close
+    transcriptPath:   './data/transcripts/', // cartella locale transcript
+  },
+
+  // ── STAT COUNTERS ─────────────────────────────────────────
+  // Popolato automaticamente da /statcounter add — non modificare manualmente
+  statCounters: [],
+
+  // ── MILESTONE DOWNLOAD ────────────────────────────────────
+  milestones: [100, 500, 1000, 5000, 10000],
+
 };
